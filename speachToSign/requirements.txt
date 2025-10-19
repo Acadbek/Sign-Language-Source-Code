@@ -1,0 +1,5 @@
+flask>=3.0.0
+flask-cors>=4.0.0
+nemo_toolkit[asr]>=1.22.0
+librosa>=0.10.0
+soundfile>=0.12.0

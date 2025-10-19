@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign Language Recognition + Jitsi</title>
+    <!-- Jitsi External API -->
+    <script src="https://meet.jit.si/external_api.js"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .main-container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        h1 { text-align: center; color: white; margin-bottom: 20px; font-size: 2em; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }
+
+        .panels {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .panel {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 30px;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+        #processedVideo { width: 100%; height: auto; display: block; }
+        #localVideo { display: none; }
+
+        .sentence-display {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            min-height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5em;
+            font-weight: bold;
+            text-align: center;
+            word-wrap: break-word;
+        }
+        .sentence-display.empty { font-style: italic; opacity: 0.7; }
+
+        .controls { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 15px; }
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+        }
+        button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+        button:disabled { background: #ccc; cursor: not-allowed; transform: none; }
+
+        .btn-green { background: #4CAF50; color: white; }
+        .btn-green:hover:not(:disabled) { background: #45a049; }
+        .btn-red { background: #f44336; color: white; }
+        .btn-red:hover:not(:disabled) { background: #da190b; }
+        .btn-orange { background: #ff9800; color: white; }
+        .btn-orange:hover:not(:disabled) { background: #e68900; }
+        .btn-blue { background: #2196F3; color: white; }
+        .btn-blue:hover:not(:disabled) { background: #0b7dda; }
+
+        .status {
+            text-align: center;
+            padding: 10px;
+            border-radius: 5px;
+            font-weight: 500;
+            margin-bottom: 15px;
+        }
+        .status.connected { background: #d4edda; color: #155724; }
+        .status.disconnected { background: #f8d7da; color: #721c24; }
+        .status.processing { background: #fff3cd; color: #856404; }
+
+        /* Jitsi Panel */
+        .room-input {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .room-input input {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        #jitsi-container {
+            width: 100%;
+            height: 400px;
+            border-radius: 10px;
+            overflow: hidden;
+            background: #000;
+            margin-bottom: 15px;
+        }
+
+        .info-box {
+            background: #e7f3ff;
+            padding: 12px;
+            border-radius: 8px;
+            border-left: 4px solid #2196F3;
+            font-size: 13px;
+            margin-top: 15px;
+        }
+
+        @media (max-width: 900px) {
+            .panels { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <h1>🤟 Sign Language Recognition + 📹 Jitsi</h1>
+
+        <div class="panels">
+            <!-- LEFT PANEL: Sign Language Recognition -->
+            <div class="panel">
+                <h2 style="text-align: center; margin-bottom: 20px;">Sign Language → Text</h2>
+
+                <div class="video-container">
+                    <img id="processedVideo" src="" alt="Processed video feed">
+                    <video id="localVideo" autoplay playsinline></video>
+                </div>
+
+                <div class="sentence-display" id="sentenceDisplay">
+                    <span class="empty">Initializing...</span>
+                </div>
+
+                <div class="controls">
+                    <button id="startBtn" class="btn-green" disabled>▶️ Start Camera</button>
+                    <button id="stopBtn" class="btn-red" disabled>⏹️ Stop</button>
+                    <button id="clearBtn" class="btn-orange">🗑️ Clear</button>
+                </div>
+
+                <div class="controls">
+                    <button id="autoShareBtn" class="btn-blue">🔄 Auto-Share: OFF</button>
+                </div>
+
+                <div id="status" class="status disconnected">Connecting...</div>
+
+                <div class="info-box">
+                    <strong>How to use:</strong><br>
+                    1. Start camera and make signs<br>
+                    2. Join Jitsi room on the right →<br>
+                    3. Enable "Auto-Share" to send signs to chat automatically
+                </div>
+            </div>
+
+            <!-- RIGHT PANEL: Jitsi Video Conference -->
+            <div class="panel">
+                <h2 style="text-align: center; margin-bottom: 20px;">Jitsi Video Conference</h2>
+
+                <div class="room-input">
+                    <input type="text" id="roomName" placeholder="Enter room name (e.g., MyRoom123)">
+                    <button class="btn-green" onclick="joinJitsiRoom()">Join Room</button>
+                </div>
+
+                <div id="jitsi-container">
+                    <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: white;">
+                        <p>Enter a room name and click "Join Room"</p>
+                    </div>
+                </div>
+
+                <div class="sentence-display" id="sharedCaptions" style="font-size: 1em; min-height: 50px;">
+                    <span class="empty">Shared captions will appear here...</span>
+                </div>
+
+                <div class="info-box">
+                    <strong>Video Conference:</strong><br>
+                    1. Enter room name and click "Join Room"<br>
+                    2. Share room name with others<br>
+                    3. Recognized signs auto-appear in chat!
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Socket.IO Connection
+        let socket = null;
+        const localVideo = document.getElementById('localVideo');
+        const processedVideo = document.getElementById('processedVideo');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const autoShareBtn = document.getElementById('autoShareBtn');
+        const sentenceDisplay = document.getElementById('sentenceDisplay');
+        const statusDiv = document.getElementById('status');
+        const sharedCaptions = document.getElementById('sharedCaptions');
+
+        let localStream = null;
+        let isStreaming = false;
+        let canvas = document.createElement('canvas');
+        let ctx = canvas.getContext('2d');
+        let frameInterval = null;
+
+        // Jitsi variables
+        let jitsiApi = null;
+        let autoShareEnabled = false;
+        let lastSharedSentence = '';
+        let currentSentence = '';
+
+        // Initialize Socket.IO
+        function initializeSocketIO() {
+            const backendUrl = 'http://localhost:8001';  // Your Flask backend
+
+            socket = io(backendUrl, {
+                transports: ['polling', 'websocket'],
+                reconnection: true,
+                reconnectionDelay: 1000,
+                reconnectionAttempts: 5,
+                timeout: 10000
+            });
+
+            socket.on('connect', () => {
+                console.log('✅ Socket.IO connected!');
+                statusDiv.textContent = '✅ Connected to server';
+                statusDiv.className = 'status connected';
+                startBtn.disabled = false;
+                sentenceDisplay.innerHTML = '<span class="empty">Make signs to start...</span>';
+            });
+
+            socket.on('disconnect', (reason) => {
+                console.log('❌ Socket.IO disconnected:', reason);
+                statusDiv.textContent = '❌ Disconnected from server';
+                statusDiv.className = 'status disconnected';
+                stopCamera();
+            });
+
+            socket.on('connect_error', (error) => {
+                console.error('❌ Socket.IO error:', error);
+                statusDiv.textContent = '❌ Connection error. Is Flask running on port 8001?';
+                statusDiv.className = 'status disconnected';
+            });
+
+            socket.on('processed_frame', (data) => {
+                processedVideo.src = data.image;
+
+                // Show current detection (even if not confident enough for sentence)
+                if (data.detecting) {
+                    const confColor = data.confidence > 0.4 ? '#4CAF50' : '#ff9800';
+                    const confStatus = data.confidence > 0.4 ? '✅' : '⚠️';
+                    console.log(`${confStatus} Detecting: ${data.detecting} (conf: ${data.confidence.toFixed(2)})`);
+                }
+
+                // Auto-share EACH NEW WORD separately (not the whole sentence)
+                if (data.recognized_word && autoShareEnabled && jitsiApi) {
+                    const newWord = data.recognized_word.toUpperCase();
+                    jitsiApi.executeCommand('sendChatMessage', `🤟 ${newWord}`);
+                    console.log('📤 Auto-shared NEW WORD to Jitsi:', newWord);
+
+                    sharedCaptions.innerHTML = `✅ Shared: "${newWord}"`;
+                    sharedCaptions.classList.remove('empty');
+                    setTimeout(() => {
+                        sharedCaptions.innerHTML = '<span class="empty">Shared captions will appear here...</span>';
+                        sharedCaptions.classList.add('empty');
+                    }, 2000);
+                }
+
+                // Display full sentence (accumulated words)
+                if (data.sentence) {
+                    currentSentence = data.sentence;
+                    sentenceDisplay.innerHTML = data.sentence;
+                    sentenceDisplay.classList.remove('empty');
+                } else if (data.detecting) {
+                    // Show what we're detecting even if not confident enough yet
+                    const opacity = data.confidence > 0.4 ? 0.8 : 0.5;
+                    sentenceDisplay.innerHTML = `<span style="opacity: ${opacity}">Detecting: ${data.detecting} (${(data.confidence * 100).toFixed(0)}%)</span>`;
+                    sentenceDisplay.classList.remove('empty');
+                } else {
+                    sentenceDisplay.innerHTML = '<span class="empty">Make signs to start...</span>';
+                    sentenceDisplay.classList.add('empty');
+                }
+
+                if (data.recognized_word) {
+                    console.log('✨ NEW WORD RECOGNIZED:', data.recognized_word);
+                }
+            });
+        }
+
+        async function startCamera() {
+            try {
+                console.log('📷 Requesting camera access...');
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: { ideal: 640 }, height: { ideal: 480 } },
+                    audio: false
+                });
+                console.log('✅ Camera access granted');
+                localVideo.srcObject = localStream;
+                await new Promise((resolve) => { localVideo.onloadedmetadata = resolve; });
+                await localVideo.play();
+                canvas.width = localVideo.videoWidth;
+                canvas.height = localVideo.videoHeight;
+                console.log('📐 Canvas:', canvas.width + 'x' + canvas.height);
+                isStreaming = true;
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                statusDiv.textContent = '🎥 Processing video...';
+                statusDiv.className = 'status processing';
+                console.log('📡 Starting frame transmission...');
+                sendFrames();
+            } catch (err) {
+                console.error('❌ Camera error:', err);
+                alert('Could not access camera: ' + err.message);
+                statusDiv.textContent = '❌ Camera error';
+                statusDiv.className = 'status disconnected';
+            }
+        }
+
+        function sendFrames() {
+            if (!isStreaming || !socket || !socket.connected) {
+                console.log('⏸️ Stopped streaming');
+                return;
+            }
+            try {
+                ctx.drawImage(localVideo, 0, 0, canvas.width, canvas.height);
+                const imageData = canvas.toDataURL('image/jpeg', 0.75);
+                socket.emit('video_frame', { image: imageData });
+                frameInterval = setTimeout(sendFrames, 100); // 10 fps
+            } catch (err) {
+                console.error('❌ Frame send error:', err);
+                stopCamera();
+            }
+        }
+
+        function stopCamera() {
+            isStreaming = false;
+            if (frameInterval) {
+                clearTimeout(frameInterval);
+                frameInterval = null;
+            }
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            localVideo.srcObject = null;
+            processedVideo.src = '';
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            statusDiv.textContent = '⏹️ Camera stopped';
+            statusDiv.className = 'status disconnected';
+        }
+
+        function clearSentence() {
+            if (socket && socket.connected) {
+                socket.emit('clear_sentence');
+                currentSentence = '';
+                lastSharedSentence = '';
+                sentenceDisplay.innerHTML = '<span class="empty">Make signs to start...</span>';
+                sentenceDisplay.classList.add('empty');
+            }
+        }
+
+        function toggleAutoShare() {
+            autoShareEnabled = !autoShareEnabled;
+
+            if (autoShareEnabled) {
+                autoShareBtn.textContent = '✅ Auto-Share: ON';
+                autoShareBtn.style.background = '#4CAF50';
+                console.log('✅ Auto-share enabled');
+
+                if (!jitsiApi) {
+                    alert('⚠️ Please join a Jitsi room first!');
+                    autoShareEnabled = false;
+                    autoShareBtn.textContent = '🔄 Auto-Share: OFF';
+                    autoShareBtn.style.background = '#2196F3';
+                }
+            } else {
+                autoShareBtn.textContent = '🔄 Auto-Share: OFF';
+                autoShareBtn.style.background = '#2196F3';
+                console.log('❌ Auto-share disabled');
+            }
+        }
+
+        // Jitsi Integration
+        function joinJitsiRoom() {
+            const roomName = document.getElementById('roomName').value.trim();
+            if (!roomName) {
+                alert('Please enter a room name');
+                return;
+            }
+
+            console.log('🔵 Joining Jitsi room:', roomName);
+
+            if (jitsiApi) {
+                jitsiApi.dispose();
+                jitsiApi = null;
+            }
+
+            const container = document.querySelector('#jitsi-container');
+            container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: white;"><p>Loading Jitsi...</p></div>';
+
+            const domain = 'meet.jit.si';
+            const randomId = Math.random().toString(36).substring(7);
+
+            const options = {
+                roomName: roomName,
+                width: '100%',
+                height: '400px',
+                parentNode: container,
+                userInfo: {
+                    displayName: 'User-' + randomId
+                },
+                configOverwrite: {
+                    startWithAudioMuted: false,
+                    startWithVideoMuted: false,
+                    prejoinPageEnabled: false,
+                    disableDeepLinking: true
+                },
+                interfaceConfigOverwrite: {
+                    TOOLBAR_BUTTONS: [
+                        'microphone', 'camera', 'desktop', 'hangup',
+                        'chat', 'settings', 'raisehand', 'tileview'
+                    ],
+                    SHOW_JITSI_WATERMARK: false,
+                    DISABLE_JOIN_LEAVE_NOTIFICATIONS: true
+                }
+            };
+
+            try {
+                jitsiApi = new JitsiMeetExternalAPI(domain, options);
+
+                jitsiApi.addEventListener('videoConferenceJoined', (participant) => {
+                    console.log('✅ Successfully joined Jitsi room:', roomName);
+                });
+
+                jitsiApi.addEventListener('participantJoined', (participant) => {
+                    console.log('👤 New participant joined:', participant.displayName);
+                });
+
+                console.log('✅ Jitsi API initialized');
+            } catch (error) {
+                console.error('❌ Error creating Jitsi instance:', error);
+                container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: white; text-align: center; padding: 20px;"><p>Error loading Jitsi. Check console.</p></div>';
+            }
+        }
+
+        // Event Listeners
+        startBtn.addEventListener('click', startCamera);
+        stopBtn.addEventListener('click', stopCamera);
+        clearBtn.addEventListener('click', clearSentence);
+        autoShareBtn.addEventListener('click', toggleAutoShare);
+
+        // Initialize on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            console.log('🚀 Initializing...');
+            initializeSocketIO();
+        });
+
+        window.addEventListener('beforeunload', () => {
+            stopCamera();
+            if (socket) socket.disconnect();
+            if (jitsiApi) jitsiApi.dispose();
+        });
+    </script>
+</body>
+</html>

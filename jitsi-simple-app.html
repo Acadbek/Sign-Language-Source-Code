@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign Language + Speech Recognition (Simple)</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .jitsi-info {
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid white;
+            border-radius: 10px;
+            padding: 20px;
+            color: white;
+            text-align: center;
+            margin-bottom: 20px;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .jitsi-info h2 {
+            margin-bottom: 10px;
+        }
+
+        .jitsi-info a {
+            color: #ffeb3b;
+            font-weight: bold;
+            text-decoration: none;
+            font-size: 1.2em;
+        }
+
+        .jitsi-info a:hover {
+            text-decoration: underline;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .panel {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel-title {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin: -20px -20px 15px -20px;
+            font-size: 1.2em;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+
+        #processedVideo {
+            width: 100%;
+            height: auto;
+            display: block;
+            min-height: 300px;
+            object-fit: cover;
+        }
+
+        #localVideo { display: none; }
+
+        .caption-display {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            min-height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5em;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 15px;
+            word-wrap: break-word;
+        }
+
+        .caption-display.empty {
+            font-size: 1em;
+            font-style: italic;
+            opacity: 0.8;
+        }
+
+        .uzbek-text {
+            background: #f0f8f0;
+            border-left: 4px solid #76b852;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            min-height: 80px;
+            font-size: 1.2em;
+        }
+
+        .uzbek-text.empty {
+            color: #999;
+            font-style: italic;
+            font-size: 1em;
+        }
+
+        .animation-display {
+            background: #fff8f0;
+            border-left: 4px solid #FF9800;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            min-height: 100px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .animation-items {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .letter-animation {
+            background: #9C27B0;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            font-family: monospace;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+
+        button {
+            padding: 15px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            flex: 1;
+            min-width: 140px;
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        button:disabled {
+            background: #ccc !important;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-green { background: #4CAF50; color: white; }
+        .btn-green:hover:not(:disabled) { background: #45a049; }
+
+        .btn-red { background: #f44336; color: white; }
+        .btn-red:hover:not(:disabled) { background: #da190b; }
+
+        .btn-orange { background: #ff9800; color: white; }
+        .btn-orange:hover:not(:disabled) { background: #e68900; }
+
+        .btn-copy { background: #2196F3; color: white; }
+        .btn-copy:hover:not(:disabled) { background: #0b7dda; }
+
+        .status {
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 10px;
+        }
+
+        .status.connected { background: #d4edda; color: #155724; }
+        .status.disconnected { background: #f8d7da; color: #721c24; }
+        .status.processing { background: #fff3cd; color: #856404; }
+        .status.recording { background: #ffe6e6; color: #c0392b; }
+
+        .info-box {
+            background: #e7f3ff;
+            padding: 12px;
+            border-radius: 8px;
+            border-left: 4px solid #2196F3;
+            font-size: 13px;
+            margin-top: 10px;
+        }
+
+        @media (max-width: 900px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🤟 Sign Language + 🎤 Speech Recognition</h1>
+        <p>Use alongside Jitsi for video conferencing</p>
+    </div>
+
+    <div class="jitsi-info">
+        <h2>📹 Open Jitsi in Another Tab:</h2>
+        <p style="margin: 10px 0;">
+            <a href="https://meet.jit.si/" target="_blank">https://meet.jit.si/YourRoomName</a>
+        </p>
+        <p style="font-size: 0.9em; margin-top: 10px;">
+            Use this app to recognize signs/speech, then copy captions to Jitsi chat
+        </p>
+    </div>
+
+    <div class="main-grid">
+        <!-- LEFT PANEL: Sign Language Recognition -->
+        <div class="panel">
+            <div class="panel-title">🤟 Sign Language → Text</div>
+
+            <div class="video-container">
+                <img id="processedVideo" src="" alt="Waiting for video...">
+                <video id="localVideo" autoplay playsinline></video>
+            </div>
+
+            <div class="caption-display" id="signCaptions">
+                <span class="empty">Recognized signs will appear here...</span>
+            </div>
+
+            <div class="button-group">
+                <button id="startSignBtn" class="btn-green" onclick="startSignRecognition()">
+                    ▶️ Start Camera
+                </button>
+                <button id="stopSignBtn" class="btn-red" onclick="stopSignRecognition()" disabled>
+                    ⏹️ Stop
+                </button>
+            </div>
+
+            <div class="button-group">
+                <button id="clearSignBtn" class="btn-orange" onclick="clearSignSentence()">
+                    🗑️ Clear
+                </button>
+                <button id="copySignBtn" class="btn-copy" onclick="copySignText()" disabled>
+                    📋 Copy Text
+                </button>
+            </div>
+
+            <div id="signStatus" class="status disconnected">
+                Connecting to server...
+            </div>
+
+            <div class="info-box">
+                <strong>How to use:</strong>
+                <ul style="margin: 5px 0 0 20px;">
+                    <li>Click "Start Camera"</li>
+                    <li>Make hand signs</li>
+                    <li>Click "Copy Text" to copy captions</li>
+                    <li>Paste in Jitsi chat</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- RIGHT PANEL: Speech-to-Sign -->
+        <div class="panel">
+            <div class="panel-title">🎤 Speech → Sign Language</div>
+
+            <div class="uzbek-text empty" id="uzbekText">
+                🇺🇿 Uzbek speech will appear here...
+            </div>
+
+            <div class="animation-display">
+                <div id="animationData" style="color: #999; font-style: italic; text-align: center;">
+                    🔤 Fingerspelling letters will appear here...
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button id="startSpeechBtn" class="btn-green" onclick="startSpeechRecording()">
+                    🎤 Start Recording
+                </button>
+                <button id="stopSpeechBtn" class="btn-red" onclick="stopSpeechRecording()" disabled>
+                    ⏹️ Stop
+                </button>
+            </div>
+
+            <div class="button-group">
+                <button id="clearSpeechBtn" class="btn-orange" onclick="clearSpeechResults()">
+                    🗑️ Clear
+                </button>
+                <button id="copySpeechBtn" class="btn-copy" onclick="copySpeechText()" disabled>
+                    📋 Copy Text
+                </button>
+            </div>
+
+            <div id="speechStatus" class="status disconnected">
+                Checking server...
+            </div>
+
+            <div class="info-box">
+                <strong>How to use:</strong>
+                <ul style="margin: 5px 0 0 20px;">
+                    <li>Click "Start Recording"</li>
+                    <li>Speak in Uzbek</li>
+                    <li>Click "Copy Text"</li>
+                    <li>Paste in Jitsi chat</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // CONFIGURATION
+        const SIGN_BACKEND = 'http://localhost:8001';
+        const SPEECH_BACKEND = 'http://localhost:7860';
+
+        // SIGN LANGUAGE RECOGNITION
+        let signSocket = null;
+        let localStream = null;
+        let isSignStreaming = false;
+        let canvas = document.createElement('canvas');
+        let ctx = canvas.getContext('2d');
+        let frameInterval = null;
+        let currentSignSentence = '';
+
+        const localVideo = document.getElementById('localVideo');
+        const processedVideo = document.getElementById('processedVideo');
+        const signCaptions = document.getElementById('signCaptions');
+        const signStatus = document.getElementById('signStatus');
+
+        function initSignLanguageSocket() {
+            signSocket = io(SIGN_BACKEND, {
+                transports: ['polling', 'websocket'],
+                reconnection: true,
+                reconnectionDelay: 1000,
+                reconnectionAttempts: 5,
+                timeout: 10000
+            });
+
+            signSocket.on('connect', () => {
+                console.log('✅ Sign language socket connected');
+                signStatus.textContent = '✅ Connected to sign language server';
+                signStatus.className = 'status connected';
+                document.getElementById('startSignBtn').disabled = false;
+            });
+
+            signSocket.on('disconnect', (reason) => {
+                console.log('❌ Sign socket disconnected:', reason);
+                signStatus.textContent = '❌ Disconnected from server';
+                signStatus.className = 'status disconnected';
+                stopSignRecognition();
+            });
+
+            signSocket.on('connect_error', (error) => {
+                console.error('❌ Sign socket error:', error);
+                signStatus.textContent = '❌ Connection error. Is Flask running on port 8001?';
+                signStatus.className = 'status disconnected';
+            });
+
+            signSocket.on('processed_frame', (data) => {
+                processedVideo.src = data.image;
+
+                if (data.sentence && data.sentence.trim()) {
+                    currentSignSentence = data.sentence;
+                    signCaptions.innerHTML = currentSignSentence;
+                    signCaptions.classList.remove('empty');
+                    document.getElementById('copySignBtn').disabled = false;
+                } else {
+                    signCaptions.innerHTML = '<span class="empty">Make signs to start...</span>';
+                    signCaptions.classList.add('empty');
+                }
+            });
+        }
+
+        async function startSignRecognition() {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: { ideal: 640 }, height: { ideal: 480 } },
+                    audio: false
+                });
+
+                localVideo.srcObject = localStream;
+                await new Promise((resolve) => { localVideo.onloadedmetadata = resolve; });
+                await localVideo.play();
+
+                canvas.width = localVideo.videoWidth;
+                canvas.height = localVideo.videoHeight;
+
+                isSignStreaming = true;
+                document.getElementById('startSignBtn').disabled = true;
+                document.getElementById('stopSignBtn').disabled = false;
+
+                signStatus.textContent = '🎥 Processing video...';
+                signStatus.className = 'status processing';
+
+                sendSignFrames();
+            } catch (err) {
+                console.error('Camera error:', err);
+                alert('Could not access camera: ' + err.message);
+                signStatus.textContent = '❌ Camera access denied';
+                signStatus.className = 'status disconnected';
+            }
+        }
+
+        function sendSignFrames() {
+            if (!isSignStreaming || !signSocket || !signSocket.connected) {
+                return;
+            }
+
+            try {
+                ctx.drawImage(localVideo, 0, 0, canvas.width, canvas.height);
+                const imageData = canvas.toDataURL('image/jpeg', 0.75);
+                signSocket.emit('video_frame', { image: imageData });
+                frameInterval = setTimeout(sendSignFrames, 100);
+            } catch (err) {
+                console.error('Frame send error:', err);
+                stopSignRecognition();
+            }
+        }
+
+        function stopSignRecognition() {
+            isSignStreaming = false;
+            if (frameInterval) {
+                clearTimeout(frameInterval);
+                frameInterval = null;
+            }
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            localVideo.srcObject = null;
+            processedVideo.src = '';
+            document.getElementById('startSignBtn').disabled = false;
+            document.getElementById('stopSignBtn').disabled = true;
+            signStatus.textContent = '⏹️ Camera stopped';
+            signStatus.className = 'status disconnected';
+        }
+
+        function clearSignSentence() {
+            if (signSocket && signSocket.connected) {
+                signSocket.emit('clear_sentence');
+                currentSignSentence = '';
+                signCaptions.innerHTML = '<span class="empty">Make signs to start...</span>';
+                signCaptions.classList.add('empty');
+                document.getElementById('copySignBtn').disabled = true;
+            }
+        }
+
+        function copySignText() {
+            if (currentSignSentence) {
+                navigator.clipboard.writeText(currentSignSentence).then(() => {
+                    alert('✅ Copied to clipboard!\nNow paste in Jitsi chat');
+                }).catch(err => {
+                    alert('Copy failed. Text: ' + currentSignSentence);
+                });
+            }
+        }
+
+        // SPEECH-TO-SIGN RECOGNITION
+        let mediaRecorder = null;
+        let isSpeechRecording = false;
+        let audioChunks = [];
+        let currentUzbekText = '';
+        let currentAnimationData = [];
+
+        const uzbekText = document.getElementById('uzbekText');
+        const animationData = document.getElementById('animationData');
+        const speechStatus = document.getElementById('speechStatus');
+
+        async function checkSpeechServer() {
+            try {
+                const response = await fetch(`${SPEECH_BACKEND}/health`);
+                const data = await response.json();
+
+                if (data.status === 'running' && data.model_loaded) {
+                    speechStatus.textContent = '✅ Speech server ready';
+                    speechStatus.className = 'status connected';
+                    document.getElementById('startSpeechBtn').disabled = false;
+                } else {
+                    speechStatus.textContent = '⏳ Model loading...';
+                    speechStatus.className = 'status processing';
+                    setTimeout(checkSpeechServer, 5000);
+                }
+            } catch (error) {
+                console.error('Speech server error:', error);
+                speechStatus.textContent = '❌ Server unavailable. Is Flask running on port 7860?';
+                speechStatus.className = 'status disconnected';
+            }
+        }
+
+        async function startSpeechRecording() {
+            if (isSpeechRecording) return;
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        sampleRate: 16000
+                    }
+                });
+
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                    }
+                };
+
+                mediaRecorder.onstop = async () => {
+                    if (audioChunks.length > 0) {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        await sendAudioToServer(audioBlob);
+                        audioChunks = [];
+                    }
+
+                    if (isSpeechRecording) {
+                        mediaRecorder.start();
+                        setTimeout(() => {
+                            if (isSpeechRecording && mediaRecorder.state === 'recording') {
+                                mediaRecorder.stop();
+                            }
+                        }, 3000);
+                    }
+                };
+
+                mediaRecorder.start();
+                isSpeechRecording = true;
+
+                document.getElementById('startSpeechBtn').disabled = true;
+                document.getElementById('stopSpeechBtn').disabled = false;
+                speechStatus.textContent = '🔴 Recording... (speak now)';
+                speechStatus.className = 'status recording';
+
+                setTimeout(() => {
+                    if (isSpeechRecording && mediaRecorder.state === 'recording') {
+                        mediaRecorder.stop();
+                    }
+                }, 3000);
+
+            } catch (error) {
+                console.error('Microphone error:', error);
+                alert('Could not access microphone: ' + error.message);
+                speechStatus.textContent = '❌ Microphone access denied';
+                speechStatus.className = 'status disconnected';
+            }
+        }
+
+        function stopSpeechRecording() {
+            if (!isSpeechRecording) return;
+
+            isSpeechRecording = false;
+
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
+
+            if (mediaRecorder && mediaRecorder.stream) {
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+            }
+
+            document.getElementById('startSpeechBtn').disabled = false;
+            document.getElementById('stopSpeechBtn').disabled = true;
+            speechStatus.textContent = '⏹️ Recording stopped';
+            speechStatus.className = 'status disconnected';
+        }
+
+        async function sendAudioToServer(audioBlob) {
+            speechStatus.textContent = '⏳ Transcribing...';
+            speechStatus.className = 'status processing';
+
+            const formData = new FormData();
+            formData.append('audio', audioBlob, `audio_${Date.now()}.webm`);
+
+            try {
+                const response = await fetch(`${SPEECH_BACKEND}/transcribe`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success && data.uzbek) {
+                    currentUzbekText = data.uzbek;
+                    uzbekText.textContent = `🇺🇿 ${currentUzbekText}`;
+                    uzbekText.classList.remove('empty');
+                    document.getElementById('copySpeechBtn').disabled = false;
+
+                    if (data.animation_data && data.animation_data.length > 0) {
+                        currentAnimationData = data.animation_data;
+                        displayAnimations(data.animation_data);
+                    }
+                }
+
+                if (isSpeechRecording) {
+                    speechStatus.textContent = '🔴 Recording... (speak now)';
+                    speechStatus.className = 'status recording';
+                }
+
+            } catch (error) {
+                console.error('Transcription error:', error);
+                if (isSpeechRecording) {
+                    speechStatus.textContent = '🔴 Recording... (error occurred)';
+                    speechStatus.className = 'status recording';
+                }
+            }
+        }
+
+        function displayAnimations(animations) {
+            let html = '<div class="animation-items">';
+
+            animations.forEach(item => {
+                if (item.type === 'letters') {
+                    item.letters.forEach(letter => {
+                        html += `<span class="letter-animation">${letter.toUpperCase()}</span>`;
+                    });
+                }
+            });
+
+            html += '</div>';
+            animationData.innerHTML = html;
+        }
+
+        function clearSpeechResults() {
+            currentUzbekText = '';
+            currentAnimationData = [];
+            uzbekText.innerHTML = '<span style="color: #999; font-style: italic;">🇺🇿 Uzbek speech will appear here...</span>';
+            uzbekText.classList.add('empty');
+            animationData.innerHTML = '<span style="color: #999; font-style: italic; text-align: center;">🔤 Fingerspelling letters will appear here...</span>';
+            document.getElementById('copySpeechBtn').disabled = true;
+        }
+
+        function copySpeechText() {
+            if (currentUzbekText) {
+                navigator.clipboard.writeText(currentUzbekText).then(() => {
+                    alert('✅ Copied to clipboard!\nNow paste in Jitsi chat');
+                }).catch(err => {
+                    alert('Copy failed. Text: ' + currentUzbekText);
+                });
+            }
+        }
+
+        // INITIALIZATION
+        window.addEventListener('DOMContentLoaded', () => {
+            console.log('🚀 Initializing application...');
+            initSignLanguageSocket();
+            checkSpeechServer();
+        });
+
+        window.addEventListener('beforeunload', () => {
+            stopSignRecognition();
+            stopSpeechRecording();
+            if (signSocket) signSocket.disconnect();
+        });
+    </script>
+</body>
+</html>

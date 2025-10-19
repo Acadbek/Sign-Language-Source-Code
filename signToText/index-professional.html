@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Communication Platform</title>
+    <script src="https://meet.jit.si/external_api.js"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --background: 0 0% 100%;
+            --foreground: 222.2 84% 4.9%;
+            --card: 0 0% 100%;
+            --card-foreground: 222.2 84% 4.9%;
+            --primary: 222.2 47.4% 11.2%;
+            --primary-foreground: 210 40% 98%;
+            --secondary: 210 40% 96.1%;
+            --secondary-foreground: 222.2 47.4% 11.2%;
+            --muted: 210 40% 96.1%;
+            --muted-foreground: 215.4 16.3% 46.9%;
+            --accent: 210 40% 96.1%;
+            --accent-foreground: 222.2 47.4% 11.2%;
+            --destructive: 0 84.2% 60.2%;
+            --border: 214.3 31.8% 91.4%;
+            --input: 214.3 31.8% 91.4%;
+            --ring: 222.2 84% 4.9%;
+            --radius: 0.5rem;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            background: hsl(var(--background));
+            color: hsl(var(--foreground));
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .header {
+            margin-bottom: 2rem;
+        }
+
+        .header h1 {
+            font-size: 1.875rem;
+            font-weight: 600;
+            letter-spacing: -0.025em;
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            color: hsl(var(--muted-foreground));
+            font-size: 0.875rem;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+        }
+
+        .card {
+            background: hsl(var(--card));
+            border: 1px solid hsl(var(--border));
+            border-radius: var(--radius);
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        }
+
+        .card-header {
+            padding: 1.5rem 1.5rem 1rem 1.5rem;
+            border-bottom: 1px solid hsl(var(--border));
+        }
+
+        .card-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .card-description {
+            font-size: 0.875rem;
+            color: hsl(var(--muted-foreground));
+        }
+
+        .card-content {
+            padding: 1.5rem;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            background: #000;
+            border-radius: calc(var(--radius) - 2px);
+            overflow: hidden;
+            margin-bottom: 1rem;
+            aspect-ratio: 4/3;
+        }
+
+        #processedVideo {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        #localVideo {
+            display: none;
+        }
+
+        .output-display {
+            background: hsl(var(--muted));
+            padding: 1rem;
+            border-radius: calc(var(--radius) - 2px);
+            min-height: 3.5rem;
+            margin-bottom: 1rem;
+            font-size: 0.9375rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            border: 1px solid hsl(var(--border));
+        }
+
+        .output-display.empty {
+            color: hsl(var(--muted-foreground));
+            font-size: 0.875rem;
+        }
+
+        .output-display.detecting {
+            opacity: 0.7;
+            font-style: italic;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: calc(var(--radius) - 2px);
+            font-size: 0.875rem;
+            font-weight: 500;
+            height: 2.5rem;
+            padding: 0 1rem;
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: all 0.2s;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: hsl(var(--primary));
+            color: hsl(var(--primary-foreground));
+            border-color: hsl(var(--primary));
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: hsl(222.2 47.4% 8%);
+        }
+
+        .btn-secondary {
+            background: hsl(var(--secondary));
+            color: hsl(var(--secondary-foreground));
+            border-color: hsl(var(--border));
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: hsl(210 40% 92%);
+        }
+
+        .btn-destructive {
+            background: hsl(var(--destructive));
+            color: white;
+        }
+
+        .btn-destructive:hover:not(:disabled) {
+            background: hsl(0 84.2% 55%);
+        }
+
+        .btn-outline {
+            background: transparent;
+            border-color: hsl(var(--input));
+            color: hsl(var(--foreground));
+        }
+
+        .btn-outline:hover:not(:disabled) {
+            background: hsl(var(--accent));
+        }
+
+        .btn-outline.active {
+            background: hsl(var(--primary));
+            color: hsl(var(--primary-foreground));
+            border-color: hsl(var(--primary));
+        }
+
+        .input {
+            display: flex;
+            height: 2.5rem;
+            width: 100%;
+            border-radius: calc(var(--radius) - 2px);
+            border: 1px solid hsl(var(--input));
+            background: hsl(var(--background));
+            padding: 0.5rem 0.75rem;
+            font-size: 0.875rem;
+            transition: all 0.2s;
+        }
+
+        .input:focus {
+            outline: none;
+            border-color: hsl(var(--ring));
+            box-shadow: 0 0 0 2px hsla(222.2, 84%, 4.9%, 0.1);
+        }
+
+        .input::placeholder {
+            color: hsl(var(--muted-foreground));
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 9999px;
+            padding: 0.25rem 0.75rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+            margin-bottom: 1rem;
+        }
+
+        .status-badge.connected {
+            background: hsl(142 76% 36% / 0.1);
+            color: hsl(142 76% 36%);
+        }
+
+        .status-badge.disconnected {
+            background: hsl(0 84% 60% / 0.1);
+            color: hsl(0 84% 60%);
+        }
+
+        .status-badge.processing {
+            background: hsl(48 96% 53% / 0.1);
+            color: hsl(25 95% 53%);
+        }
+
+        .status-badge.recording {
+            background: hsl(0 84% 60% / 0.1);
+            color: hsl(0 84% 60%);
+        }
+
+        #jitsi-container {
+            width: 100%;
+            height: 400px;
+            border-radius: calc(var(--radius) - 2px);
+            overflow: hidden;
+            background: #000;
+            margin-bottom: 1rem;
+        }
+
+        .room-input-group {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .room-input-group input {
+            flex: 1;
+        }
+
+        .uzbek-output {
+            background: hsl(142 76% 36% / 0.05);
+            border: 1px solid hsl(142 76% 36% / 0.2);
+            padding: 1rem;
+            border-radius: calc(var(--radius) - 2px);
+            margin-bottom: 1rem;
+            min-height: 3.5rem;
+            font-size: 0.9375rem;
+        }
+
+        .uzbek-output.empty {
+            color: hsl(var(--muted-foreground));
+            font-size: 0.875rem;
+        }
+
+        .letters-display {
+            background: hsl(var(--muted));
+            border: 1px solid hsl(var(--border));
+            padding: 1rem;
+            border-radius: calc(var(--radius) - 2px);
+            margin-bottom: 1rem;
+            min-height: 4rem;
+            max-height: 8rem;
+            overflow-y: auto;
+        }
+
+        .letters-display.empty {
+            color: hsl(var(--muted-foreground));
+            font-size: 0.875rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .letter-items {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.375rem;
+        }
+
+        .letter-item {
+            background: hsl(var(--primary));
+            color: hsl(var(--primary-foreground));
+            padding: 0.25rem 0.5rem;
+            border-radius: calc(var(--radius) - 4px);
+            font-size: 0.75rem;
+            font-weight: 500;
+            font-family: monospace;
+        }
+
+        .label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+        }
+
+        .flex {
+            display: flex;
+        }
+
+        .flex-1 {
+            flex: 1;
+        }
+
+        .gap-2 {
+            gap: 0.5rem;
+        }
+
+        @media (max-width: 1400px) {
+            .grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 900px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .divider {
+            height: 1px;
+            background: hsl(var(--border));
+            margin: 1rem 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Communication Platform</h1>
+            <p>Real-time sign language recognition, speech transcription, and video conferencing</p>
+        </div>
+
+        <div class="grid">
+            <!-- Sign Language Panel -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Sign Language Recognition</h3>
+                    <p class="card-description">Detect and translate hand signs to text</p>
+                </div>
+                <div class="card-content">
+                    <div class="video-container">
+                        <img id="processedVideo" src="" alt="Video feed">
+                        <video id="localVideo" autoplay playsinline></video>
+                    </div>
+
+                    <div class="output-display empty" id="sentenceDisplay">
+                        Waiting for input...
+                    </div>
+
+                    <div class="button-group">
+                        <button id="startBtn" class="btn-primary flex-1" disabled>Start Camera</button>
+                        <button id="stopBtn" class="btn-destructive flex-1" disabled>Stop</button>
+                    </div>
+
+                    <div class="button-group">
+                        <button id="clearBtn" class="btn-secondary flex-1">Clear</button>
+                        <button id="autoShareSignBtn" class="btn-outline flex-1">Auto-Share</button>
+                    </div>
+
+                    <button id="sendSignBtn" class="btn-primary" style="width: 100%; margin-bottom: 1rem;" disabled>Send to Chat</button>
+
+                    <div id="signStatus" class="status-badge disconnected">Disconnected</div>
+                </div>
+            </div>
+
+            <!-- Jitsi Panel -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Video Conference</h3>
+                    <p class="card-description">Join or create a meeting room</p>
+                </div>
+                <div class="card-content">
+                    <div class="room-input-group">
+                        <input type="text" id="roomName" class="input" placeholder="Enter room name">
+                        <button class="btn-primary" onclick="joinJitsiRoom()">Join Room</button>
+                    </div>
+
+                    <div id="jitsi-container">
+                        <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #999; font-size: 0.875rem;">
+                            Enter a room name to begin
+                        </div>
+                    </div>
+
+                    <div class="output-display empty" id="sharedCaptions">
+                        Shared messages appear here
+                    </div>
+                </div>
+            </div>
+
+            <!-- Speech Recognition Panel -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Speech Recognition</h3>
+                    <p class="card-description">Transcribe Uzbek speech to text</p>
+                </div>
+                <div class="card-content">
+                    <div class="uzbek-output empty" id="uzbekText">
+                        Uzbek transcription appears here...
+                    </div>
+
+                    <div class="letters-display empty" id="animationData">
+                        Letter-by-letter breakdown appears here
+                    </div>
+
+                    <div class="button-group">
+                        <button id="startSpeechBtn" class="btn-primary flex-1">Start Recording</button>
+                        <button id="stopSpeechBtn" class="btn-destructive flex-1" disabled>Stop</button>
+                    </div>
+
+                    <div class="button-group">
+                        <button id="clearSpeechBtn" class="btn-secondary flex-1">Clear</button>
+                        <button id="autoShareSpeechBtn" class="btn-outline flex-1">Auto-Share</button>
+                    </div>
+
+                    <button id="sendSpeechBtn" class="btn-primary" style="width: 100%; margin-bottom: 1rem;" disabled>Send to Chat</button>
+
+                    <div id="speechStatus" class="status-badge disconnected">Checking server</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const SIGN_BACKEND = 'http://localhost:8001';
+        const SPEECH_BACKEND = 'http://localhost:7860';
+
+        // Sign Language Variables
+        let signSocket = null;
+        const localVideo = document.getElementById('localVideo');
+        const processedVideo = document.getElementById('processedVideo');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const autoShareSignBtn = document.getElementById('autoShareSignBtn');
+        const sendSignBtn = document.getElementById('sendSignBtn');
+        const sentenceDisplay = document.getElementById('sentenceDisplay');
+        const signStatus = document.getElementById('signStatus');
+
+        let localStream = null;
+        let isStreaming = false;
+        let canvas = document.createElement('canvas');
+        let ctx = canvas.getContext('2d');
+        let frameInterval = null;
+        let autoShareSignEnabled = false;
+        let currentSignSentence = '';
+
+        // Initialize Sign Language Socket
+        function initializeSocketIO() {
+            signSocket = io(SIGN_BACKEND, {
+                transports: ['polling', 'websocket'],
+                reconnection: true,
+                reconnectionDelay: 1000,
+                reconnectionAttempts: 5,
+                timeout: 10000
+            });
+
+            signSocket.on('connect', () => {
+                signStatus.textContent = 'Connected';
+                signStatus.className = 'status-badge connected';
+                startBtn.disabled = false;
+                sentenceDisplay.innerHTML = 'Ready to recognize signs';
+                sentenceDisplay.className = 'output-display empty';
+            });
+
+            signSocket.on('disconnect', () => {
+                signStatus.textContent = 'Disconnected';
+                signStatus.className = 'status-badge disconnected';
+                stopCamera();
+            });
+
+            signSocket.on('connect_error', () => {
+                signStatus.textContent = 'Connection error';
+                signStatus.className = 'status-badge disconnected';
+            });
+
+            signSocket.on('processed_frame', (data) => {
+                processedVideo.src = data.image;
+
+                // Auto-share new words
+                if (data.recognized_word && autoShareSignEnabled && jitsiApi) {
+                    const newWord = data.recognized_word.toUpperCase();
+                    jitsiApi.executeCommand('sendChatMessage', `Sign: ${newWord}`);
+
+                    sharedCaptions.innerHTML = `Shared: ${newWord}`;
+                    sharedCaptions.className = 'output-display';
+                    setTimeout(() => {
+                        sharedCaptions.innerHTML = 'Shared messages appear here';
+                        sharedCaptions.className = 'output-display empty';
+                    }, 2000);
+                }
+
+                // Display sentence
+                if (data.sentence) {
+                    currentSignSentence = data.sentence;
+                    sentenceDisplay.innerHTML = data.sentence;
+                    sentenceDisplay.className = 'output-display';
+                    // Enable send button if Jitsi is connected and auto-share is off
+                    sendSignBtn.disabled = !(jitsiApi && !autoShareSignEnabled);
+                } else if (data.detecting) {
+                    const percent = (data.confidence * 100).toFixed(0);
+                    sentenceDisplay.innerHTML = `Detecting: ${data.detecting} (${percent}%)`;
+                    sentenceDisplay.className = 'output-display detecting';
+                } else {
+                    sentenceDisplay.innerHTML = 'Make signs to begin';
+                    sentenceDisplay.className = 'output-display empty';
+                    currentSignSentence = '';
+                    sendSignBtn.disabled = true;
+                }
+            });
+        }
+
+        async function startCamera() {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: { ideal: 640 }, height: { ideal: 480 } },
+                    audio: false
+                });
+                localVideo.srcObject = localStream;
+                await new Promise((resolve) => { localVideo.onloadedmetadata = resolve; });
+                await localVideo.play();
+                canvas.width = localVideo.videoWidth;
+                canvas.height = localVideo.videoHeight;
+                isStreaming = true;
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                signStatus.textContent = 'Processing';
+                signStatus.className = 'status-badge processing';
+                sendFrames();
+            } catch (err) {
+                alert('Could not access camera: ' + err.message);
+                signStatus.textContent = 'Camera error';
+                signStatus.className = 'status-badge disconnected';
+            }
+        }
+
+        function sendFrames() {
+            if (!isStreaming || !signSocket || !signSocket.connected) return;
+            try {
+                ctx.drawImage(localVideo, 0, 0, canvas.width, canvas.height);
+                const imageData = canvas.toDataURL('image/jpeg', 0.75);
+                signSocket.emit('video_frame', { image: imageData });
+                frameInterval = setTimeout(sendFrames, 100);
+            } catch (err) {
+                stopCamera();
+            }
+        }
+
+        function stopCamera() {
+            isStreaming = false;
+            if (frameInterval) {
+                clearTimeout(frameInterval);
+                frameInterval = null;
+            }
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            localVideo.srcObject = null;
+            processedVideo.src = '';
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            signStatus.textContent = 'Stopped';
+            signStatus.className = 'status-badge disconnected';
+        }
+
+        function clearSentence() {
+            if (signSocket && signSocket.connected) {
+                signSocket.emit('clear_sentence');
+                sentenceDisplay.innerHTML = 'Ready to recognize signs';
+                sentenceDisplay.className = 'output-display empty';
+                currentSignSentence = '';
+                sendSignBtn.disabled = true;
+            }
+        }
+
+        function sendSignToChat() {
+            if (!jitsiApi) {
+                alert('Please join a Jitsi room first');
+                return;
+            }
+            if (!currentSignSentence) {
+                alert('No text to send');
+                return;
+            }
+
+            jitsiApi.executeCommand('sendChatMessage', `Sign: ${currentSignSentence}`);
+
+            sharedCaptions.innerHTML = `Shared: ${currentSignSentence}`;
+            sharedCaptions.className = 'output-display';
+            setTimeout(() => {
+                sharedCaptions.innerHTML = 'Shared messages appear here';
+                sharedCaptions.className = 'output-display empty';
+            }, 2000);
+
+            // Clear the sentence after sending
+            if (signSocket && signSocket.connected) {
+                signSocket.emit('clear_sentence');
+                sentenceDisplay.innerHTML = 'Ready to recognize signs';
+                sentenceDisplay.className = 'output-display empty';
+                currentSignSentence = '';
+                sendSignBtn.disabled = true;
+            }
+        }
+
+        function toggleAutoShareSign() {
+            autoShareSignEnabled = !autoShareSignEnabled;
+
+            if (autoShareSignEnabled) {
+                autoShareSignBtn.textContent = 'Auto-Share: On';
+                autoShareSignBtn.classList.add('active');
+                sendSignBtn.disabled = true; // Disable manual send when auto-share is on
+                if (!jitsiApi) {
+                    alert('Please join a Jitsi room first');
+                    autoShareSignEnabled = false;
+                    autoShareSignBtn.textContent = 'Auto-Share';
+                    autoShareSignBtn.classList.remove('active');
+                    sendSignBtn.disabled = !(jitsiApi && currentSignSentence);
+                }
+            } else {
+                autoShareSignBtn.textContent = 'Auto-Share';
+                autoShareSignBtn.classList.remove('active');
+                // Enable send button if we have content and Jitsi is connected
+                sendSignBtn.disabled = !(jitsiApi && currentSignSentence);
+            }
+        }
+
+        // Speech Recognition Variables
+        let mediaRecorder = null;
+        let isSpeechRecording = false;
+        let audioChunks = [];
+        let autoShareSpeechEnabled = false;
+        let currentUzbekText = '';
+
+        const uzbekText = document.getElementById('uzbekText');
+        const animationData = document.getElementById('animationData');
+        const speechStatus = document.getElementById('speechStatus');
+        const startSpeechBtn = document.getElementById('startSpeechBtn');
+        const stopSpeechBtn = document.getElementById('stopSpeechBtn');
+        const clearSpeechBtn = document.getElementById('clearSpeechBtn');
+        const autoShareSpeechBtn = document.getElementById('autoShareSpeechBtn');
+        const sendSpeechBtn = document.getElementById('sendSpeechBtn');
+
+        async function checkSpeechServer() {
+            try {
+                const response = await fetch(`${SPEECH_BACKEND}/health`);
+                const data = await response.json();
+
+                if (data.status === 'running' && data.model_loaded) {
+                    speechStatus.textContent = 'Ready';
+                    speechStatus.className = 'status-badge connected';
+                    startSpeechBtn.disabled = false;
+                } else {
+                    speechStatus.textContent = 'Loading model';
+                    speechStatus.className = 'status-badge processing';
+                    setTimeout(checkSpeechServer, 5000);
+                }
+            } catch (error) {
+                speechStatus.textContent = 'Server unavailable';
+                speechStatus.className = 'status-badge disconnected';
+            }
+        }
+
+        async function startSpeechRecording() {
+            if (isSpeechRecording) return;
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 16000 }
+                });
+
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = async () => {
+                    if (audioChunks.length > 0) {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        await sendAudioToServer(audioBlob);
+                        audioChunks = [];
+                    }
+
+                    if (isSpeechRecording) {
+                        mediaRecorder.start();
+                        setTimeout(() => {
+                            if (isSpeechRecording && mediaRecorder.state === 'recording') {
+                                mediaRecorder.stop();
+                            }
+                        }, 3000);
+                    }
+                };
+
+                mediaRecorder.start();
+                isSpeechRecording = true;
+                startSpeechBtn.disabled = true;
+                stopSpeechBtn.disabled = false;
+                speechStatus.textContent = 'Recording';
+                speechStatus.className = 'status-badge recording';
+
+                setTimeout(() => {
+                    if (isSpeechRecording && mediaRecorder.state === 'recording') {
+                        mediaRecorder.stop();
+                    }
+                }, 3000);
+
+            } catch (error) {
+                alert('Could not access microphone: ' + error.message);
+                speechStatus.textContent = 'Microphone error';
+                speechStatus.className = 'status-badge disconnected';
+            }
+        }
+
+        function stopSpeechRecording() {
+            if (!isSpeechRecording) return;
+            isSpeechRecording = false;
+
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
+
+            if (mediaRecorder && mediaRecorder.stream) {
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+            }
+
+            startSpeechBtn.disabled = false;
+            stopSpeechBtn.disabled = true;
+            speechStatus.textContent = 'Stopped';
+            speechStatus.className = 'status-badge disconnected';
+        }
+
+        async function sendAudioToServer(audioBlob) {
+            speechStatus.textContent = 'Transcribing';
+            speechStatus.className = 'status-badge processing';
+
+            const formData = new FormData();
+            formData.append('audio', audioBlob, `audio_${Date.now()}.webm`);
+
+            try {
+                const response = await fetch(`${SPEECH_BACKEND}/transcribe`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success && data.uzbek) {
+                    currentUzbekText = data.uzbek;
+                    uzbekText.textContent = data.uzbek;
+                    uzbekText.className = 'uzbek-output';
+
+                    if (data.animation_data && data.animation_data.length > 0) {
+                        displayAnimations(data.animation_data);
+                    }
+
+                    // Enable send button if Jitsi is connected and auto-share is off
+                    sendSpeechBtn.disabled = !(jitsiApi && !autoShareSpeechEnabled);
+
+                    // Auto-share to Jitsi
+                    if (autoShareSpeechEnabled && jitsiApi) {
+                        jitsiApi.executeCommand('sendChatMessage', `Speech: ${data.uzbek}`);
+
+                        sharedCaptions.innerHTML = `Shared: ${data.uzbek}`;
+                        sharedCaptions.className = 'output-display';
+                        setTimeout(() => {
+                            sharedCaptions.innerHTML = 'Shared messages appear here';
+                            sharedCaptions.className = 'output-display empty';
+                        }, 2000);
+                    }
+                }
+
+                if (isSpeechRecording) {
+                    speechStatus.textContent = 'Recording';
+                    speechStatus.className = 'status-badge recording';
+                }
+
+            } catch (error) {
+                if (isSpeechRecording) {
+                    speechStatus.textContent = 'Recording';
+                    speechStatus.className = 'status-badge recording';
+                }
+            }
+        }
+
+        function displayAnimations(animations) {
+            let html = '<div class="letter-items">';
+            animations.forEach(item => {
+                if (item.type === 'letters') {
+                    item.letters.forEach(letter => {
+                        html += `<span class="letter-item">${letter.toUpperCase()}</span>`;
+                    });
+                }
+            });
+            html += '</div>';
+            animationData.innerHTML = html;
+            animationData.className = 'letters-display';
+        }
+
+        function clearSpeechResults() {
+            uzbekText.innerHTML = 'Uzbek transcription appears here...';
+            uzbekText.className = 'uzbek-output empty';
+            animationData.innerHTML = 'Letter-by-letter breakdown appears here';
+            animationData.className = 'letters-display empty';
+            currentUzbekText = '';
+            sendSpeechBtn.disabled = true;
+        }
+
+        function sendSpeechToChat() {
+            if (!jitsiApi) {
+                alert('Please join a Jitsi room first');
+                return;
+            }
+            if (!currentUzbekText) {
+                alert('No text to send');
+                return;
+            }
+
+            jitsiApi.executeCommand('sendChatMessage', `Speech: ${currentUzbekText}`);
+
+            sharedCaptions.innerHTML = `Shared: ${currentUzbekText}`;
+            sharedCaptions.className = 'output-display';
+            setTimeout(() => {
+                sharedCaptions.innerHTML = 'Shared messages appear here';
+                sharedCaptions.className = 'output-display empty';
+            }, 2000);
+
+            // Clear the transcription after sending
+            uzbekText.innerHTML = 'Uzbek transcription appears here...';
+            uzbekText.className = 'uzbek-output empty';
+            animationData.innerHTML = 'Letter-by-letter breakdown appears here';
+            animationData.className = 'letters-display empty';
+            currentUzbekText = '';
+            sendSpeechBtn.disabled = true;
+        }
+
+        function toggleAutoShareSpeech() {
+            autoShareSpeechEnabled = !autoShareSpeechEnabled;
+
+            if (autoShareSpeechEnabled) {
+                autoShareSpeechBtn.textContent = 'Auto-Share: On';
+                autoShareSpeechBtn.classList.add('active');
+                sendSpeechBtn.disabled = true; // Disable manual send when auto-share is on
+                if (!jitsiApi) {
+                    alert('Please join a Jitsi room first');
+                    autoShareSpeechEnabled = false;
+                    autoShareSpeechBtn.textContent = 'Auto-Share';
+                    autoShareSpeechBtn.classList.remove('active');
+                    sendSpeechBtn.disabled = !(jitsiApi && currentUzbekText);
+                }
+            } else {
+                autoShareSpeechBtn.textContent = 'Auto-Share';
+                autoShareSpeechBtn.classList.remove('active');
+                // Enable send button if we have content and Jitsi is connected
+                sendSpeechBtn.disabled = !(jitsiApi && currentUzbekText);
+            }
+        }
+
+        // Jitsi Integration
+        let jitsiApi = null;
+        const sharedCaptions = document.getElementById('sharedCaptions');
+
+        function joinJitsiRoom() {
+            const roomName = document.getElementById('roomName').value.trim();
+            if (!roomName) {
+                alert('Please enter a room name');
+                return;
+            }
+
+            if (jitsiApi) {
+                jitsiApi.dispose();
+                jitsiApi = null;
+            }
+
+            const container = document.querySelector('#jitsi-container');
+            container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #999; font-size: 0.875rem;">Loading conference...</div>';
+
+            const randomId = Math.random().toString(36).substring(7);
+
+            const options = {
+                roomName: roomName,
+                width: '100%',
+                height: '400px',
+                parentNode: container,
+                userInfo: {
+                    displayName: 'User-' + randomId
+                },
+                configOverwrite: {
+                    startWithAudioMuted: false,
+                    startWithVideoMuted: false,
+                    prejoinPageEnabled: false,
+                    disableDeepLinking: true
+                },
+                interfaceConfigOverwrite: {
+                    TOOLBAR_BUTTONS: [
+                        'microphone', 'camera', 'desktop', 'hangup',
+                        'chat', 'settings', 'raisehand', 'tileview'
+                    ],
+                    SHOW_JITSI_WATERMARK: false,
+                    DISABLE_JOIN_LEAVE_NOTIFICATIONS: true
+                }
+            };
+
+            try {
+                jitsiApi = new JitsiMeetExternalAPI('meet.jit.si', options);
+            } catch (error) {
+                container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #999; font-size: 0.875rem;">Error loading conference</div>';
+            }
+        }
+
+        // Event Listeners
+        startBtn.addEventListener('click', startCamera);
+        stopBtn.addEventListener('click', stopCamera);
+        clearBtn.addEventListener('click', clearSentence);
+        autoShareSignBtn.addEventListener('click', toggleAutoShareSign);
+        sendSignBtn.addEventListener('click', sendSignToChat);
+
+        startSpeechBtn.addEventListener('click', startSpeechRecording);
+        stopSpeechBtn.addEventListener('click', stopSpeechRecording);
+        clearSpeechBtn.addEventListener('click', clearSpeechResults);
+        autoShareSpeechBtn.addEventListener('click', toggleAutoShareSpeech);
+        sendSpeechBtn.addEventListener('click', sendSpeechToChat);
+
+        // Initialize
+        window.addEventListener('DOMContentLoaded', () => {
+            initializeSocketIO();
+            checkSpeechServer();
+        });
+
+        window.addEventListener('beforeunload', () => {
+            stopCamera();
+            stopSpeechRecording();
+            if (signSocket) signSocket.disconnect();
+            if (jitsiApi) jitsiApi.dispose();
+        });
+    </script>
+</body>
+</html>

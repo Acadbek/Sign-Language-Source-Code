@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign Language + Jitsi Video Conference</title>
+
+    <!-- Jitsi External API -->
+    <script src="https://meet.jit.si/external_api.js"></script>
+
+    <!-- Socket.IO for Sign Language Recognition -->
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 20px;
+            max-width: 1800px;
+            margin: 0 auto;
+        }
+
+        .panel {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel-title {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin: -20px -20px 15px -20px;
+            font-size: 1.2em;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        /* Sign Recognition Panel */
+        .video-container {
+            position: relative;
+            width: 100%;
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+
+        #processedVideo {
+            width: 100%;
+            height: auto;
+            display: block;
+            min-height: 300px;
+            object-fit: cover;
+        }
+
+        #localVideo {
+            display: none;
+        }
+
+        .caption-display {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            min-height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2em;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 15px;
+            word-wrap: break-word;
+        }
+
+        .caption-display.empty {
+            font-size: 0.9em;
+            font-style: italic;
+            opacity: 0.8;
+        }
+
+        /* Jitsi Panel */
+        .room-input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .room-input-group input {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .room-input-group button {
+            padding: 12px 20px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+
+        .room-input-group button:hover {
+            background: #45a049;
+            transform: translateY(-2px);
+        }
+
+        #jitsi-container {
+            width: 100%;
+            height: 400px;
+            border-radius: 10px;
+            overflow: hidden;
+            background: #000;
+            margin-bottom: 15px;
+        }
+
+        /* Speech-to-Sign Panel */
+        .uzbek-text {
+            background: #f0f8f0;
+            border-left: 4px solid #76b852;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            min-height: 60px;
+            font-size: 1em;
+        }
+
+        .uzbek-text.empty {
+            color: #999;
+            font-style: italic;
+        }
+
+        .animation-display {
+            background: #fff8f0;
+            border-left: 4px solid #FF9800;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            min-height: 80px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .animation-items {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .letter-animation {
+            background: #9C27B0;
+            color: white;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            font-family: monospace;
+        }
+
+        /* Buttons */
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+
+        button {
+            padding: 12px 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            flex: 1;
+            min-width: 120px;
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        button:disabled {
+            background: #ccc !important;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-green { background: #4CAF50; color: white; }
+        .btn-green:hover:not(:disabled) { background: #45a049; }
+
+        .btn-red { background: #f44336; color: white; }
+        .btn-red:hover:not(:disabled) { background: #da190b; }
+
+        .btn-orange { background: #ff9800; color: white; }
+        .btn-orange:hover:not(:disabled) { background: #e68900; }
+
+        .btn-blue { background: #2196F3; color: white; }
+        .btn-blue:hover:not(:disabled) { background: #0b7dda; }
+
+        /* Status indicators */
+        .status {
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 10px;
+        }
+
+        .status.connected { background: #d4edda; color: #155724; }
+        .status.disconnected { background: #f8d7da; color: #721c24; }
+        .status.processing { background: #fff3cd; color: #856404; }
+        .status.recording { background: #ffe6e6; color: #c0392b; }
+
+        /* Info boxes */
+        .info-box {
+            background: #e7f3ff;
+            padding: 12px;
+            border-radius: 8px;
+            border-left: 4px solid #2196F3;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+
+        .info-box ul {
+            margin: 5px 0 0 20px;
+        }
+
+        .info-box li {
+            margin: 3px 0;
+        }
+
+        /* Responsive */
+        @media (max-width: 1400px) {
+            .main-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        @media (max-width: 900px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🤟 Sign Language + 📹 Jitsi + 🎤 Speech Recognition</h1>
+        <p>All-in-one communication platform</p>
+    </div>
+
+    <div class="main-grid">
+        <!-- LEFT PANEL: Sign Language Recognition -->
+        <div class="panel">
+            <div class="panel-title">🤟 Sign Language → Text</div>
+
+            <div class="video-container">
+                <img id="processedVideo" src="" alt="Waiting for video...">
+                <video id="localVideo" autoplay playsinline></video>
+            </div>
+
+            <div class="caption-display" id="signCaptions">
+                <span class="empty">Recognized signs will appear here...</span>
+            </div>
+
+            <div class="button-group">
+                <button id="startSignBtn" class="btn-green" onclick="startSignRecognition()">
+                    ▶️ Start Camera
+                </button>
+                <button id="stopSignBtn" class="btn-red" onclick="stopSignRecognition()" disabled>
+                    ⏹️ Stop
+                </button>
+            </div>
+
+            <div class="button-group">
+                <button id="clearSignBtn" class="btn-orange" onclick="clearSignSentence()">
+                    🗑️ Clear
+                </button>
+                <button id="autoShareSignBtn" class="btn-blue" onclick="toggleAutoShareSign()">
+                    🔄 Auto-Share: OFF
+                </button>
+            </div>
+
+            <div id="signStatus" class="status disconnected">
+                Connecting to server...
+            </div>
+
+            <div class="info-box">
+                <strong>How to use:</strong>
+                <ul>
+                    <li>Click "Start Camera"</li>
+                    <li>Make hand signs in front of camera</li>
+                    <li>Recognized words appear above</li>
+                    <li>Click "Auto-Share: OFF" to enable live captioning</li>
+                    <li>Words automatically sent to Jitsi chat!</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- CENTER PANEL: Jitsi Video Conference -->
+        <div class="panel">
+            <div class="panel-title">📹 Jitsi Video Conference</div>
+
+            <div class="room-input-group">
+                <input type="text" id="roomName" placeholder="Enter room name" value="">
+                <button onclick="generateRandomRoom()">🎲 Random Room</button>
+                <button onclick="joinJitsiRoom()">Join Room</button>
+            </div>
+
+            <div id="jitsi-container">
+                <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: white; text-align: center;">
+                    <div>
+                        <p style="font-size: 1.2em; margin-bottom: 10px;">📹</p>
+                        <p>Enter a room name and click "Join Room"</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="caption-display" id="jitsiSharedCaptions">
+                <span class="empty">Shared captions will appear here...</span>
+            </div>
+
+            <div class="info-box">
+                <strong>Video Conference:</strong>
+                <ul>
+                    <li>Enter a room name above</li>
+                    <li>Share the room name with others</li>
+                    <li>Use buttons to share sign/speech captions</li>
+                    <li>All participants will see captions in chat</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- RIGHT PANEL: Speech-to-Sign -->
+        <div class="panel">
+            <div class="panel-title">🎤 Speech → Sign Language</div>
+
+            <div class="uzbek-text empty" id="uzbekText">
+                🇺🇿 Uzbek speech will appear here...
+            </div>
+
+            <div class="animation-display">
+                <div id="animationData" style="color: #999; font-style: italic; text-align: center;">
+                    🔤 Fingerspelling letters will appear here...
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button id="startSpeechBtn" class="btn-green" onclick="startSpeechRecording()">
+                    🎤 Start Recording
+                </button>
+                <button id="stopSpeechBtn" class="btn-red" onclick="stopSpeechRecording()" disabled>
+                    ⏹️ Stop
+                </button>
+            </div>
+
+            <div class="button-group">
+                <button id="clearSpeechBtn" class="btn-orange" onclick="clearSpeechResults()">
+                    🗑️ Clear
+                </button>
+                <button id="autoShareSpeechBtn" class="btn-blue" onclick="toggleAutoShareSpeech()">
+                    🔄 Auto-Share: OFF
+                </button>
+            </div>
+
+            <div id="speechStatus" class="status disconnected">
+                Checking server...
+            </div>
+
+            <div class="info-box">
+                <strong>How to use:</strong>
+                <ul>
+                    <li>Click "Start Recording"</li>
+                    <li>Speak in Uzbek (3 seconds chunks)</li>
+                    <li>Transcription appears above</li>
+                    <li>Letters show fingerspelling animation</li>
+                    <li>Click "Auto-Share: OFF" to enable live captioning</li>
+                    <li>Speech automatically sent to Jitsi chat!</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ========================================
+        // CONFIGURATION
+        // ========================================
+        const SIGN_BACKEND = 'http://localhost:8001';  // signToText Flask backend
+        const SPEECH_BACKEND = 'http://localhost:7860'; // speachToSign Flask backend
+
+        // ========================================
+        // SIGN LANGUAGE RECOGNITION
+        // ========================================
+        let signSocket = null;
+        let localStream = null;
+        let isSignStreaming = false;
+        let canvas = document.createElement('canvas');
+        let ctx = canvas.getContext('2d');
+        let frameInterval = null;
+        let currentSignSentence = '';
+        let lastSharedSignSentence = '';
+        let autoShareSignEnabled = false;
+
+        const localVideo = document.getElementById('localVideo');
+        const processedVideo = document.getElementById('processedVideo');
+        const signCaptions = document.getElementById('signCaptions');
+        const signStatus = document.getElementById('signStatus');
+
+        // Initialize Socket.IO connection for sign language
+        function initSignLanguageSocket() {
+            signSocket = io(SIGN_BACKEND, {
+                transports: ['polling', 'websocket'],
+                reconnection: true,
+                reconnectionDelay: 1000,
+                reconnectionAttempts: 5,
+                timeout: 10000
+            });
+
+            signSocket.on('connect', () => {
+                console.log('✅ Sign language socket connected');
+                signStatus.textContent = '✅ Connected to sign language server';
+                signStatus.className = 'status connected';
+                document.getElementById('startSignBtn').disabled = false;
+            });
+
+            signSocket.on('disconnect', (reason) => {
+                console.log('❌ Sign socket disconnected:', reason);
+                signStatus.textContent = '❌ Disconnected from server';
+                signStatus.className = 'status disconnected';
+                stopSignRecognition();
+            });
+
+            signSocket.on('connect_error', (error) => {
+                console.error('❌ Sign socket error:', error);
+                signStatus.textContent = '❌ Connection error. Is Flask running on port 8001?';
+                signStatus.className = 'status disconnected';
+            });
+
+            let frameCount = 0;
+            signSocket.on('processed_frame', (data) => {
+                frameCount++;
+
+                // Update video display
+                processedVideo.src = data.image;
+
+                // DEBUG: Log complete data object periodically
+                if (frameCount % 30 === 0) {
+                    console.log('📦 Frame #' + frameCount + ' DATA:', {
+                        sentence: data.sentence,
+                        sentenceType: typeof data.sentence,
+                        sentenceLength: data.sentence ? data.sentence.length : 0,
+                        recognized_word: data.recognized_word,
+                        hasImage: data.image ? 'YES' : 'NO'
+                    });
+                }
+
+                // Handle sentence display and auto-sharing
+                const sentence = data.sentence || '';
+
+                // Update display
+                if (sentence && sentence.trim()) {
+                    currentSignSentence = sentence;
+                    signCaptions.innerHTML = sentence;
+                    signCaptions.classList.remove('empty');
+
+                    console.log('🤟 DISPLAYING SENTENCE:', sentence);
+
+                    // Auto-share to Jitsi if enabled and sentence changed
+                    if (autoShareSignEnabled && sentence !== lastSharedSignSentence && jitsiApi) {
+                        lastSharedSignSentence = sentence;
+                        jitsiApi.executeCommand('sendChatMessage', `🤟 Sign: ${sentence}`);
+                        console.log('📤 AUTO-SHARED to Jitsi:', sentence);
+
+                        // Visual feedback
+                        const sharedCaptions = document.getElementById('jitsiSharedCaptions');
+                        sharedCaptions.innerHTML = `✅ Shared: "${sentence}"`;
+                        sharedCaptions.classList.remove('empty');
+                        setTimeout(() => {
+                            sharedCaptions.innerHTML = '<span class="empty">Shared captions will appear here...</span>';
+                            sharedCaptions.classList.add('empty');
+                        }, 2000);
+                    }
+                } else {
+                    // No sentence yet
+                    signCaptions.innerHTML = '<span class="empty">Make signs to start...</span>';
+                    signCaptions.classList.add('empty');
+                }
+
+                // Handle recognized_word for instant feedback
+                if (data.recognized_word) {
+                    console.log('✨ NEW WORD RECOGNIZED:', data.recognized_word);
+                }
+            });
+        }
+
+        async function startSignRecognition() {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: { ideal: 640 }, height: { ideal: 480 } },
+                    audio: false
+                });
+
+                localVideo.srcObject = localStream;
+                await new Promise((resolve) => { localVideo.onloadedmetadata = resolve; });
+                await localVideo.play();
+
+                canvas.width = localVideo.videoWidth;
+                canvas.height = localVideo.videoHeight;
+
+                isSignStreaming = true;
+                document.getElementById('startSignBtn').disabled = true;
+                document.getElementById('stopSignBtn').disabled = false;
+
+                signStatus.textContent = '🎥 Processing video...';
+                signStatus.className = 'status processing';
+
+                sendSignFrames();
+            } catch (err) {
+                console.error('Camera error:', err);
+                alert('Could not access camera: ' + err.message);
+                signStatus.textContent = '❌ Camera access denied';
+                signStatus.className = 'status disconnected';
+            }
+        }
+
+        let sendFrameCount = 0;
+        function sendSignFrames() {
+            if (!isSignStreaming || !signSocket || !signSocket.connected) {
+                console.log('❌ Not sending frames:', { isSignStreaming, socketConnected: signSocket ? signSocket.connected : false });
+                return;
+            }
+
+            try {
+                ctx.drawImage(localVideo, 0, 0, canvas.width, canvas.height);
+                const imageData = canvas.toDataURL('image/jpeg', 0.75);
+                signSocket.emit('video_frame', { image: imageData });
+
+                sendFrameCount++;
+                if (sendFrameCount % 30 === 0) {
+                    console.log('📤 SENT ' + sendFrameCount + ' frames to Flask backend');
+                }
+
+                frameInterval = setTimeout(sendSignFrames, 100); // 10 fps
+            } catch (err) {
+                console.error('Frame send error:', err);
+                stopSignRecognition();
+            }
+        }
+
+        function stopSignRecognition() {
+            isSignStreaming = false;
+            if (frameInterval) {
+                clearTimeout(frameInterval);
+                frameInterval = null;
+            }
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            localVideo.srcObject = null;
+            processedVideo.src = '';
+            document.getElementById('startSignBtn').disabled = false;
+            document.getElementById('stopSignBtn').disabled = true;
+            signStatus.textContent = '⏹️ Camera stopped';
+            signStatus.className = 'status disconnected';
+        }
+
+        function clearSignSentence() {
+            if (signSocket && signSocket.connected) {
+                signSocket.emit('clear_sentence');
+                currentSignSentence = '';
+                lastSharedSignSentence = '';
+                signCaptions.innerHTML = '<span class="empty">Make signs to start...</span>';
+                signCaptions.classList.add('empty');
+            }
+        }
+
+        function toggleAutoShareSign() {
+            autoShareSignEnabled = !autoShareSignEnabled;
+            const btn = document.getElementById('autoShareSignBtn');
+
+            if (autoShareSignEnabled) {
+                btn.textContent = '✅ Auto-Share: ON';
+                btn.style.background = '#4CAF50';
+                console.log('✅ Auto-share enabled - captions will be sent to Jitsi automatically');
+
+                if (!jitsiApi) {
+                    alert('⚠️ Please join a Jitsi room first to enable auto-sharing');
+                    autoShareSignEnabled = false;
+                    btn.textContent = '🔄 Auto-Share: OFF';
+                    btn.style.background = '#2196F3';
+                }
+            } else {
+                btn.textContent = '🔄 Auto-Share: OFF';
+                btn.style.background = '#2196F3';
+                console.log('❌ Auto-share disabled');
+            }
+        }
+
+        // ========================================
+        // SPEECH-TO-SIGN RECOGNITION
+        // ========================================
+        let mediaRecorder = null;
+        let isSpeechRecording = false;
+        let audioChunks = [];
+        let currentUzbekText = '';
+        let currentAnimationData = [];
+        let lastSharedSpeechText = '';
+        let autoShareSpeechEnabled = false;
+
+        const uzbekText = document.getElementById('uzbekText');
+        const animationData = document.getElementById('animationData');
+        const speechStatus = document.getElementById('speechStatus');
+
+        // Check speech server health
+        async function checkSpeechServer() {
+            try {
+                const response = await fetch(`${SPEECH_BACKEND}/health`);
+                const data = await response.json();
+
+                if (data.status === 'running' && data.model_loaded) {
+                    speechStatus.textContent = '✅ Speech server ready';
+                    speechStatus.className = 'status connected';
+                    document.getElementById('startSpeechBtn').disabled = false;
+                } else {
+                    speechStatus.textContent = '⏳ Model loading...';
+                    speechStatus.className = 'status processing';
+                    setTimeout(checkSpeechServer, 5000);
+                }
+            } catch (error) {
+                console.error('Speech server error:', error);
+                speechStatus.textContent = '❌ Server unavailable. Is Flask running on port 7860?';
+                speechStatus.className = 'status disconnected';
+            }
+        }
+
+        async function startSpeechRecording() {
+            if (isSpeechRecording) return;
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        sampleRate: 16000
+                    }
+                });
+
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                    }
+                };
+
+                mediaRecorder.onstop = async () => {
+                    if (audioChunks.length > 0) {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        await sendAudioToServer(audioBlob);
+                        audioChunks = [];
+                    }
+
+                    // Continue recording if still active
+                    if (isSpeechRecording) {
+                        mediaRecorder.start();
+                        setTimeout(() => {
+                            if (isSpeechRecording && mediaRecorder.state === 'recording') {
+                                mediaRecorder.stop();
+                            }
+                        }, 3000); // 3 second chunks
+                    }
+                };
+
+                mediaRecorder.start();
+                isSpeechRecording = true;
+
+                document.getElementById('startSpeechBtn').disabled = true;
+                document.getElementById('stopSpeechBtn').disabled = false;
+                speechStatus.textContent = '🔴 Recording... (speak now)';
+                speechStatus.className = 'status recording';
+
+                setTimeout(() => {
+                    if (isSpeechRecording && mediaRecorder.state === 'recording') {
+                        mediaRecorder.stop();
+                    }
+                }, 3000);
+
+            } catch (error) {
+                console.error('Microphone error:', error);
+                alert('Could not access microphone: ' + error.message);
+                speechStatus.textContent = '❌ Microphone access denied';
+                speechStatus.className = 'status disconnected';
+            }
+        }
+
+        function stopSpeechRecording() {
+            if (!isSpeechRecording) return;
+
+            isSpeechRecording = false;
+
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
+
+            if (mediaRecorder && mediaRecorder.stream) {
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+            }
+
+            document.getElementById('startSpeechBtn').disabled = false;
+            document.getElementById('stopSpeechBtn').disabled = true;
+            speechStatus.textContent = '⏹️ Recording stopped';
+            speechStatus.className = 'status disconnected';
+        }
+
+        async function sendAudioToServer(audioBlob) {
+            speechStatus.textContent = '⏳ Transcribing...';
+            speechStatus.className = 'status processing';
+
+            const formData = new FormData();
+            formData.append('audio', audioBlob, `audio_${Date.now()}.webm`);
+
+            try {
+                const response = await fetch(`${SPEECH_BACKEND}/transcribe`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success && data.uzbek) {
+                    currentUzbekText = data.uzbek;
+                    uzbekText.textContent = `🇺🇿 ${currentUzbekText}`;
+                    uzbekText.classList.remove('empty');
+
+                    if (data.animation_data && data.animation_data.length > 0) {
+                        currentAnimationData = data.animation_data;
+                        displayAnimations(data.animation_data);
+                    }
+
+                    // Auto-share to Jitsi if enabled and text changed
+                    if (autoShareSpeechEnabled && currentUzbekText !== lastSharedSpeechText && jitsiApi) {
+                        lastSharedSpeechText = currentUzbekText;
+                        jitsiApi.executeCommand('sendChatMessage', `🎤 Speech: ${currentUzbekText}`);
+                        console.log('📤 Auto-shared speech to Jitsi:', currentUzbekText);
+
+                        // Visual feedback
+                        const sharedCaptions = document.getElementById('jitsiSharedCaptions');
+                        sharedCaptions.innerHTML = `✅ Auto-shared: "${currentUzbekText}"`;
+                        sharedCaptions.classList.remove('empty');
+                        setTimeout(() => {
+                            sharedCaptions.innerHTML = '<span class="empty">Shared captions will appear here...</span>';
+                            sharedCaptions.classList.add('empty');
+                        }, 2000);
+                    }
+                }
+
+                if (isSpeechRecording) {
+                    speechStatus.textContent = '🔴 Recording... (speak now)';
+                    speechStatus.className = 'status recording';
+                }
+
+            } catch (error) {
+                console.error('Transcription error:', error);
+                if (isSpeechRecording) {
+                    speechStatus.textContent = '🔴 Recording... (error occurred)';
+                    speechStatus.className = 'status recording';
+                }
+            }
+        }
+
+        function displayAnimations(animations) {
+            let html = '<div class="animation-items">';
+
+            animations.forEach(item => {
+                if (item.type === 'letters') {
+                    item.letters.forEach(letter => {
+                        html += `<span class="letter-animation">${letter.toUpperCase()}</span>`;
+                    });
+                }
+            });
+
+            html += '</div>';
+            animationData.innerHTML = html;
+        }
+
+        function clearSpeechResults() {
+            currentUzbekText = '';
+            currentAnimationData = [];
+            lastSharedSpeechText = '';
+            uzbekText.innerHTML = '<span style="color: #999; font-style: italic;">🇺🇿 Uzbek speech will appear here...</span>';
+            uzbekText.classList.add('empty');
+            animationData.innerHTML = '<span style="color: #999; font-style: italic; text-align: center;">🔤 Fingerspelling letters will appear here...</span>';
+        }
+
+        function toggleAutoShareSpeech() {
+            autoShareSpeechEnabled = !autoShareSpeechEnabled;
+            const btn = document.getElementById('autoShareSpeechBtn');
+
+            if (autoShareSpeechEnabled) {
+                btn.textContent = '✅ Auto-Share: ON';
+                btn.style.background = '#4CAF50';
+                console.log('✅ Speech auto-share enabled - transcriptions will be sent to Jitsi automatically');
+
+                if (!jitsiApi) {
+                    alert('⚠️ Please join a Jitsi room first to enable auto-sharing');
+                    autoShareSpeechEnabled = false;
+                    btn.textContent = '🔄 Auto-Share: OFF';
+                    btn.style.background = '#2196F3';
+                }
+            } else {
+                btn.textContent = '🔄 Auto-Share: OFF';
+                btn.style.background = '#2196F3';
+                console.log('❌ Speech auto-share disabled');
+            }
+        }
+
+        // ========================================
+        // JITSI INTEGRATION
+        // ========================================
+        let jitsiApi = null;
+
+        // Generate a random room name
+        function generateRandomRoom() {
+            const adjectives = ['Quick', 'Happy', 'Smart', 'Bright', 'Cool', 'Swift', 'Easy', 'Nice'];
+            const nouns = ['Meeting', 'Chat', 'Talk', 'Call', 'Room', 'Session', 'Conference'];
+            const randomNum = Math.floor(Math.random() * 10000);
+
+            const randomRoom = adjectives[Math.floor(Math.random() * adjectives.length)] +
+                              nouns[Math.floor(Math.random() * nouns.length)] +
+                              randomNum;
+
+            document.getElementById('roomName').value = randomRoom;
+            console.log('Generated room:', randomRoom);
+        }
+
+        function joinJitsiRoom() {
+            const roomName = document.getElementById('roomName').value.trim();
+            if (!roomName) {
+                alert('Please enter a room name');
+                return;
+            }
+
+            console.log('🔵 Attempting to join Jitsi room:', roomName);
+
+            // Dispose existing instance
+            if (jitsiApi) {
+                console.log('🔄 Disposing existing Jitsi instance');
+                jitsiApi.dispose();
+                jitsiApi = null;
+            }
+
+            // Clear the container
+            const container = document.querySelector('#jitsi-container');
+            container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: white;"><p>Loading Jitsi...</p></div>';
+
+            // Use meet.jit.si - the main Jitsi server
+            const domain = 'meet.jit.si';
+
+            // Generate a unique username to avoid conflicts
+            const randomId = Math.random().toString(36).substring(7);
+
+            const options = {
+                roomName: roomName,
+                width: '100%',
+                height: '400px',
+                parentNode: container,
+                userInfo: {
+                    displayName: 'User-' + randomId
+                },
+                configOverwrite: {
+                    startWithAudioMuted: false,
+                    startWithVideoMuted: false,
+                    prejoinPageEnabled: false,
+                    disableDeepLinking: true
+                },
+                interfaceConfigOverwrite: {
+                    TOOLBAR_BUTTONS: [
+                        'microphone', 'camera', 'desktop', 'hangup',
+                        'chat', 'settings', 'raisehand', 'tileview'
+                    ],
+                    SHOW_JITSI_WATERMARK: false,
+                    DISABLE_JOIN_LEAVE_NOTIFICATIONS: true
+                }
+            };
+
+            console.log('🚀 Creating Jitsi instance with options:', options);
+
+            try {
+                jitsiApi = new JitsiMeetExternalAPI(domain, options);
+
+                jitsiApi.addEventListener('videoConferenceJoined', (participant) => {
+                    console.log('✅ Successfully joined Jitsi room:', roomName);
+                    console.log('👤 Your participant info:', participant);
+                });
+
+                jitsiApi.addEventListener('participantJoined', (participant) => {
+                    console.log('👤 New participant joined:', participant.displayName);
+                });
+
+                jitsiApi.addEventListener('readyToClose', () => {
+                    console.log('❌ Jitsi conference ended');
+                });
+
+                console.log('✅ Jitsi API initialized successfully');
+
+            } catch (error) {
+                console.error('❌ Error creating Jitsi instance:', error);
+                container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: white; text-align: center; padding: 20px;"><p>Error loading Jitsi. Check console for details.</p></div>';
+            }
+        }
+
+        function shareSignToJitsi() {
+            if (!jitsiApi) {
+                alert('Please join a Jitsi room first');
+                return;
+            }
+
+            if (!currentSignSentence) {
+                alert('No sign language to share. Make some signs first!');
+                return;
+            }
+
+            // Send to Jitsi chat
+            jitsiApi.executeCommand('sendChatMessage', `🤟 Sign Language: ${currentSignSentence}`);
+
+            // Show confirmation
+            const sharedCaptions = document.getElementById('jitsiSharedCaptions');
+            sharedCaptions.innerHTML = `✅ Shared: "${currentSignSentence}"`;
+            sharedCaptions.classList.remove('empty');
+
+            setTimeout(() => {
+                sharedCaptions.innerHTML = '<span class="empty">Shared captions will appear here...</span>';
+                sharedCaptions.classList.add('empty');
+            }, 3000);
+        }
+
+        function shareSpeechToJitsi() {
+            if (!jitsiApi) {
+                alert('Please join a Jitsi room first');
+                return;
+            }
+
+            if (!currentUzbekText) {
+                alert('No speech to share. Record something first!');
+                return;
+            }
+
+            // Send to Jitsi chat
+            jitsiApi.executeCommand('sendChatMessage', `🎤 Speech (Uzbek): ${currentUzbekText}`);
+
+            // Show confirmation
+            const sharedCaptions = document.getElementById('jitsiSharedCaptions');
+            sharedCaptions.innerHTML = `✅ Shared: "${currentUzbekText}"`;
+            sharedCaptions.classList.remove('empty');
+
+            setTimeout(() => {
+                sharedCaptions.innerHTML = '<span class="empty">Shared captions will appear here...</span>';
+                sharedCaptions.classList.add('empty');
+            }, 3000);
+        }
+
+        // ========================================
+        // INITIALIZATION
+        // ========================================
+        window.addEventListener('DOMContentLoaded', () => {
+            console.log('🚀 Initializing application...');
+            initSignLanguageSocket();
+            checkSpeechServer();
+        });
+
+        window.addEventListener('beforeunload', () => {
+            stopSignRecognition();
+            stopSpeechRecording();
+            if (signSocket) signSocket.disconnect();
+            if (jitsiApi) jitsiApi.dispose();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign Language + Jitsi (Remote Backend)</title>
+    <!-- Same head content as jitsi-combined-app.html -->
+    <script src="https://meet.jit.si/external_api.js"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        /* Copy all styles from jitsi-combined-app.html */
+        /* For brevity, use the same styles */
+    </style>
+</head>
+<body>
+    <!-- Same HTML structure -->
+
+    <script>
+        // ========================================
+        // CONFIGURATION - CHANGE THESE URLs!
+        // ========================================
+        const SIGN_BACKEND = 'https://YOUR-NGROK-URL-FOR-5000.ngrok.io';  // ← CHANGE THIS
+        const SPEECH_BACKEND = 'https://YOUR-NGROK-URL-FOR-7860.ngrok.io'; // ← CHANGE THIS
+
+        // Rest of the JavaScript same as jitsi-combined-app.html
+    </script>
+</body>
+</html>

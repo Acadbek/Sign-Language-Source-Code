@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Uzbek Speech → Fingerspelling (Real-Time)</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #76b852 0%, #8DC26F 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 800px;
+            width: 100%;
+            padding: 40px;
+            animation: slideUp 0.5s ease;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 24px;
+        }
+
+        .results-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .result-box {
+            background: #f8f9fa;
+            border: 2px solid #e0e0e0;
+            border-radius: 15px;
+            padding: 20px;
+            min-height: 80px;
+            font-size: 16px;
+            line-height: 1.6;
+            color: #333;
+        }
+
+        .result-box.empty {
+            color: #999;
+            font-style: italic;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .result-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #666;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .uzbek-box {
+            border-left: 4px solid #76b852;
+            background: #f0f8f0;
+        }
+
+        .animation-box {
+            border-left: 4px solid #FF9800;
+            background: #fff8f0;
+        }
+
+        .partial-result {
+            opacity: 0.7;
+            font-style: italic;
+        }
+
+        .animation-items {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 8px;
+        }
+
+        .word-group {
+            background: #f0f0f0;
+            padding: 8px 12px;
+            border-radius: 12px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .letter-animation {
+            background: #9C27B0;
+            color: white;
+            padding: 6px 10px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            display: inline-block;
+            font-family: monospace;
+        }
+
+        .button-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-start {
+            background: linear-gradient(135deg, #76b852 0%, #8DC26F 100%);
+            color: white;
+        }
+
+        .btn-stop {
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            color: white;
+        }
+
+        .btn-clear {
+            background: #95a5a6;
+            color: white;
+            grid-column: span 2;
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        button:disabled {
+            background: #ccc !important;
+            cursor: not-allowed !important;
+            transform: none !important;
+        }
+
+        .recording-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            background: #e74c3c;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+        }
+
+        .status {
+            text-align: center;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .status.recording {
+            background: #ffe6e6;
+            color: #c0392b;
+            border: 2px solid #e74c3c;
+        }
+
+        .status.processing {
+            background: #fff3cd;
+            color: #856404;
+            border: 2px solid #ffc107;
+        }
+
+        .status.idle {
+            background: #d4edda;
+            color: #155724;
+            border: 2px solid #28a745;
+        }
+
+        .connection-status {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 12px;
+            color: #999;
+        }
+
+        .connection-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+
+        .connected {
+            background: #28a745;
+        }
+
+        .disconnected {
+            background: #dc3545;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #76b852;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+        }
+
+        .emoji {
+            font-size: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 Узбек нутқи → Имзо тили (Реал вақт)</h1>
+
+        <div class="stats">
+            <div class="stat-item">
+                <div class="stat-value" id="wordCount">0</div>
+                <div class="stat-label">Сўзлар</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="letterCount">0</div>
+                <div class="stat-label">Ҳарфлар</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="chunkCount">0</div>
+                <div class="stat-label">Бўлаклар</div>
+            </div>
+        </div>
+
+        <div id="statusBar" class="status idle">
+            ✅ Тайёр. Гапиришни бошлаш учун тугмани босинг
+        </div>
+
+        <div class="results-container" id="resultsContainer">
+            <div class="result-box uzbek-box empty">
+                <span>🇺🇿 Узбек матни шу ерда кўринади...</span>
+            </div>
+
+            <div class="result-box animation-box empty">
+                <span>🔤 Ҳарфлар шу ерда кўринади...</span>
+            </div>
+        </div>
+
+        <div class="button-group">
+            <button class="btn-start" id="startBtn" onclick="startRecording()">
+                <span class="emoji">🎤</span>
+                Гапиришни бошлаш
+            </button>
+
+            <button class="btn-stop" id="stopBtn" onclick="stopRecording()" disabled>
+                <span class="emoji">⏹️</span>
+                Тўхтатиш
+            </button>
+
+            <button class="btn-clear" onclick="clearResults()">
+                <span class="emoji">🗑️</span>
+                Тозалаш
+            </button>
+        </div>
+
+        <div class="connection-status">
+            <span class="connection-indicator disconnected" id="indicator"></span>
+            <span id="connection-text">Текшириляпти...</span>
+        </div>
+    </div>
+
+    <script>
+        let mediaRecorder;
+        let isRecording = false;
+        let audioChunks = [];
+        let allTranscriptions = [];
+        let allAnimations = [];
+        let chunkCounter = 0;
+        let recordingInterval;
+        let stream;
+
+        const CHUNK_DURATION = 3000; // 3 seconds per chunk
+
+        // Check server connection on load
+        window.addEventListener('load', checkConnection);
+
+        async function checkConnection() {
+            try {
+                const response = await fetch('/health');
+                const data = await response.json();
+
+                const indicator = document.getElementById('indicator');
+                const text = document.getElementById('connection-text');
+
+                if (data.status === 'running' && data.model_loaded) {
+                    indicator.className = 'connection-indicator connected';
+                    text.textContent = `✓ Ready`;
+                } else {
+                    indicator.className = 'connection-indicator disconnected';
+                    text.textContent = 'Модел юкланмоқда... 🔄';
+                    setTimeout(checkConnection, 5000);
+                }
+            } catch (error) {
+                const indicator = document.getElementById('indicator');
+                const text = document.getElementById('connection-text');
+                indicator.className = 'connection-indicator disconnected';
+                text.textContent = 'Сервер билан алоқа йўқ ❌';
+            }
+        }
+
+        async function startRecording() {
+            if (isRecording) return;
+
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        sampleRate: 16000
+                    }
+                });
+
+                mediaRecorder = new MediaRecorder(stream, {
+                    mimeType: 'audio/webm'
+                });
+
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                    }
+                };
+
+                mediaRecorder.onstop = async () => {
+                    if (audioChunks.length > 0) {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        await sendAudioChunk(audioBlob);
+                        audioChunks = [];
+                    }
+
+                    // Continue recording if still active
+                    if (isRecording) {
+                        mediaRecorder.start();
+                        setTimeout(() => {
+                            if (isRecording && mediaRecorder.state === 'recording') {
+                                mediaRecorder.stop();
+                            }
+                        }, CHUNK_DURATION);
+                    }
+                };
+
+                // Start first chunk
+                mediaRecorder.start();
+                isRecording = true;
+
+                // Update UI
+                document.getElementById('startBtn').disabled = true;
+                document.getElementById('stopBtn').disabled = false;
+                updateStatus('recording', '🔴 Гапираяпсиз... (тўхтатиш учун тугмани босинг)');
+
+                // Stop first chunk after duration
+                setTimeout(() => {
+                    if (isRecording && mediaRecorder.state === 'recording') {
+                        mediaRecorder.stop();
+                    }
+                }, CHUNK_DURATION);
+
+            } catch (error) {
+                console.error('Microphone error:', error);
+                updateStatus('idle', '❌ Микрофонга рухсат берилмаган');
+            }
+        }
+
+        function stopRecording() {
+            if (!isRecording) return;
+
+            isRecording = false;
+
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
+
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+
+            // Update UI
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            updateStatus('idle', '✅ Тўхтатилди. Янги гаплашиш учун тугмани босинг');
+        }
+
+        async function sendAudioChunk(audioBlob) {
+            updateStatus('processing', '⏳ Танилмоқда...');
+
+            const formData = new FormData();
+            formData.append('audio', audioBlob, `chunk_${Date.now()}.webm`);
+
+            try {
+                const response = await fetch('/transcribe', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success && data.uzbek) {
+                    chunkCounter++;
+                    allTranscriptions.push(data.uzbek);
+
+                    if (data.animation_data) {
+                        allAnimations.push(...data.animation_data);
+                    }
+
+                    displayResults();
+                    updateStats();
+                }
+
+                if (isRecording) {
+                    updateStatus('recording', '🔴 Гапираяпсиз... (тўхтатиш учун тугмани босинг)');
+                }
+
+            } catch (error) {
+                console.error('Transcription error:', error);
+                if (isRecording) {
+                    updateStatus('recording', '🔴 Гапираяпсиз... (хато юз берди)');
+                }
+            }
+        }
+
+        function displayResults() {
+            const resultsContainer = document.getElementById('resultsContainer');
+
+            // Display Uzbek text
+            const uzbekText = allTranscriptions.join(' ');
+            const uzbekBox = `
+                <div class="result-box uzbek-box">
+                    <div class="result-label">🇺🇿 Узбек матни</div>
+                    <div class="result-text">${uzbekText}</div>
+                </div>
+            `;
+
+            // Display animations
+            let animationHTML = '';
+            if (allAnimations.length > 0) {
+                let totalLetters = 0;
+                allAnimations.forEach(item => {
+                    if (item.type === 'letters') {
+                        const lettersHTML = item.letters.map(letter =>
+                            `<span class="letter-animation">${letter.toUpperCase()}</span>`
+                        ).join('');
+
+                        animationHTML += `
+                            <div class="word-group">
+                                <span class="letter-animation" style="background: #555;">🔤 ${item.word}</span>
+                                ${lettersHTML}
+                            </div>
+                        `;
+                        totalLetters += item.letters.length;
+                    }
+                });
+
+                const animationBox = `
+                    <div class="result-box animation-box">
+                        <div class="result-label">🎮 Unity анимациялари (${totalLetters} та)</div>
+                        <div class="animation-items">${animationHTML}</div>
+                    </div>
+                `;
+
+                resultsContainer.innerHTML = uzbekBox + animationBox;
+            } else {
+                resultsContainer.innerHTML = uzbekBox + `
+                    <div class="result-box animation-box empty">
+                        <span>🔤 Ҳарфлар кутилмоқда...</span>
+                    </div>
+                `;
+            }
+
+            // Auto-scroll to bottom
+            resultsContainer.scrollTop = resultsContainer.scrollHeight;
+        }
+
+        function updateStats() {
+            document.getElementById('wordCount').textContent = allTranscriptions.length;
+
+            let totalLetters = 0;
+            allAnimations.forEach(item => {
+                if (item.type === 'letters') {
+                    totalLetters += item.letters.length;
+                }
+            });
+            document.getElementById('letterCount').textContent = totalLetters;
+            document.getElementById('chunkCount').textContent = chunkCounter;
+        }
+
+        function updateStatus(type, message) {
+            const statusBar = document.getElementById('statusBar');
+            statusBar.className = `status ${type}`;
+            statusBar.textContent = message;
+        }
+
+        function clearResults() {
+            allTranscriptions = [];
+            allAnimations = [];
+            chunkCounter = 0;
+
+            const resultsContainer = document.getElementById('resultsContainer');
+            resultsContainer.innerHTML = `
+                <div class="result-box uzbek-box empty">
+                    <span>🇺🇿 Узбек матни шу ерда кўринади...</span>
+                </div>
+                <div class="result-box animation-box empty">
+                    <span>🔤 Ҳарфлар шу ерда кўринади...</span>
+                </div>
+            `;
+
+            updateStats();
+            updateStatus('idle', '✅ Тозаланди. Янги гаплашиш учун тугмани босинг');
+        }
+    </script>
+</body>
+</html>
